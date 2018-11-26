@@ -28,6 +28,7 @@ library(tidyr)
 library(plyr)
 library(dplyr)
 library(stringr)
+library(furrr)
 
 library(ggplot2)
 library(limma)
@@ -120,7 +121,7 @@ GENOTYPE = downloadFile(GENOTYPE_ID) %>%
 # Get RNASeq QCmetadata
 METADATA_QC_ACC_ID = 'syn16816488' 
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_QC_ACC_ID
-METADATA_QC_ACC = downloadFile_version(METADATA_QC_ACC_ID, version = 8) %>% 
+METADATA_QC_ACC = downloadFile_version(METADATA_QC_ACC_ID, version = 9) %>% 
   dplyr::select(Individual_ID, Institution, Reported_Gender, Sex, Ethnicity, Age_of_Death, `PMI_(in_hours)`, Dx,
                 Sample_RNA_ID, one_of('rnaSeq_isolation:Exclude?', 'rnaSeq_isolation:RIN',
                                       'rnaSeq_report:Ribozero_Batch', 'rnaSeq_report:Library_Batch', 
@@ -160,7 +161,8 @@ METADATA = METADATA_QC_ACC %>%
                 LibraryBatch, FlowcellBatch, RibozeroBatch, MappedReads, TotalReads, GenesDetected, AlignmentRate,
                 IntragenicRate, IntergenicRate, IntronicRate, ExpProfEfficiency, rRNARate) %>%
   dplyr::filter(SampleID %in% colnames(COUNT), !is.na(SampleID)) %>%
-  dplyr::mutate(Dx = forcats::fct_recode(Dx,  Other = "AFF", Other = "BP", Control = "Control", SCZ = "SCZ"))
+  dplyr::mutate(Dx = forcats::fct_recode(Dx,  Other = "AFF", Other = "BP", Control = "Control", SCZ = "SCZ")) %>% 
+  dplyr::mutate(LibraryBatch = forcats::fct_explicit_na(LibraryBatch, na_level="Missing"))
 
 ind = METADATA$SampleID[which(METADATA$IsolationExclude == 1 | METADATA$ReportExclude == 1)]
 writeLines(paste('Following',length(ind),'samples are marked exclude'))
@@ -265,7 +267,7 @@ FILT <- REPORTED.GENDER.COUNTS %>%
   mutate(UTY = as.numeric(`ENSG00000183878.15`))
 
 p = ggplot(FILT, aes (x= XIST, y = UTY)) 
-p = p + geom_point(aes(color=`Reported Gender`)) 
+p = p + geom_point(aes(color=`Reported Gender`))
 p
 ```
 
@@ -276,7 +278,7 @@ Determine relationship between covariates.
 To summarize NAN values:
 sapply(METADATA, function(x) sum(is.nan(x)))
 ```{r covariates.clustering}
-FactorCovariates <- c('Individual_ID', "Institution", "Reported_Gender", "LibraryBatch", "Dx", "FlowcellBatch")
+FactorCovariates <- c("Institution", "Reported_Gender", "LibraryBatch", "Dx", "FlowcellBatch")
 ContCovariates <- c("Age_of_Death", "PMI", "RIN", "MappedReads", "IntragenicRate", "IntronicRate", "IntergenicRate",
                     "GenesDetected", "ExpProfEfficiency", "rRNARate", "TotalReads", 
                     "EV.1", "EV.2", "EV.3", "EV.4", "EV.5")
@@ -358,7 +360,6 @@ multiplot(plotlist = p, cols = 3)
 ### Filter genes
 Remove genes that have less than 1 cpm counts in at least 50% of samples per Dx and per Dx.sex. Also remove genes with missing gene length and percentage GC content
 
-
 ```{r cpmnormalisation}
 rownames(COUNT) = COUNT$gene_id
 COUNT$gene_id = NULL
@@ -404,6 +405,8 @@ indToRemove = c('MSSM_RNA_ACC_BP_24', 'MSSM_RNA_ACC_375', 'MSSM_RNA_ACC_170', 'M
                 "PITT_RNA_ACC_1240", "PITT_RNA_ACC_1284", "PITT_RNA_ACC_700", "PITT_RNA_ACC_857", "PITT_RNA_ACC_BP_1589",
                 "MSSM_RNA_PFC_230", "MSSM_RNA_PFC_304", "MSSM_RNA_PFC_309", "MSSM_RNA_PFC_329", "MSSM_RNA_PFC_82",
                 "PENN_RNA_PFC_5", "PENN_RNA_PFC_58", "PENN_RNA_PFC_99", "PITT_RNA_PFC_1284")
+
+indToRemove = c(indToRemove, c("MSSM_RNA_ACC_224", "MSSM_RNA_ACC_240", "MSSM_RNA_ACC_BP_11", "MSSM_RNA_ACC_42", "MSSM_RNA_ACC_BP_15", "PENN_RNA_ACC_003", "MSSM_RNA_ACC_374"))
 
 # Find principal components of expression to plot
 PC <- prcomp(voom(PROCESSED_COUNTS$filteredExprMatrix$counts)$E, scale.=T, center = T)
@@ -479,37 +482,12 @@ NEW.COUNTS = PROCESSED_COUNTS$filteredExprMatrix$counts
 NEW.COUNTS[is.na(LOG.CPM)] = 0
 ```
 
-```{r testCPM}
-# TEMP <- LOG.CPM
-# TEMP$gene_id = rownames(TEMP) 
-# t <- data.frame(TEMP) %>% 
-#   mutate(gene_id = rownames(TEMP))
-# REPORTED.GENDER.COUNTS = GENE.GC.CONT %>% 
-#   left_join(t) %>%
-#   dplyr::select(-one_of("percentage_gene_gc_content")) %>%
-#   filter(chromosome_name == "X" |chromosome_name == "Y") %>% 
-#   tidyr::gather(key = item, value = value, -c(gene_id, chromosome_name)) %>%
-#   rename(`CPM(log)`= value) %>% 
-#   rename(SampleID = item) %>%
-#   left_join(METADATA[,c("SampleID", "Reported_Gender")]) %>% 
-#   rename(`Reported Gender` = Reported_Gender)
-
-
-# my.theme <- theme_bw() %+replace% theme(legend.position = 'top', axis.text.x = element_text(angle = 90, hjust = 1), plot.title=element_text(hjust=0.5))
-# 
-# p = list()
-# p[[1]] = ggplot(filter(REPORTED.GENDER.COUNTS, chromosome_name == "X"), aes(x = `Reported Gender`, y = `CPM(log)`)) + geom_boxplot()
-# p[[1]] = p[[1]] + ggtitle('X') + my.theme
-# p[[2]] = ggplot(filter(REPORTED.GENDER.COUNTS, chromosome_name == "Y"), aes(x = `Reported Gender`, y = `CPM(log)`)) + geom_boxplot()
-# p[[2]] = p[[2]] + ggtitle('Y') + my.theme
-#multiplot(plotlist = p, cols = 2)
-```
 ### Library Normalisation
 Initial library normalisation usign cqn
 ```{r cqn}
 # Compute offset for gene length and gc content
 GENE.LEN = tibble::column_to_rownames(GENE.LEN, var = 'gene_id') %>% as.data.frame()
-CQN.GENE_EXPRESSION = cqn(round(NEW.COUNTS[,c(1:190, 192:476)]), 
+CQN.GENE_EXPRESSION = cqn(round(NEW.COUNTS), 
                           x = GENE.GC.CONT[PROCESSED_COUNTS$filteredExprMatrix$genes$genes, 'percentage_gene_gc_content'],
                           lengths = GENE.LEN[PROCESSED_COUNTS$filteredExprMatrix$genes$genes, 'Length'],
                           lengthMethod = "smooth", 
@@ -546,7 +524,6 @@ PC <- prcomp(tmp, scale.=T, center = T)
 plotdata <- data.frame(SampleID=rownames(PC$rotation), 
                        PC1=PC$rotation[,1], 
                        PC2=PC$rotation[,2])
-
 plotdata <- left_join(plotdata, rownameToFirstColumn(COVARIATES, 'SampleID'))
 
 p <- ggplot(plotdata, aes(x=PC1, y=PC2))
@@ -555,7 +532,7 @@ p <- p + theme_bw() %+replace% theme(legend.position="top") + guides(colour = gu
                                                                      shape = guide_legend(nrow = 2),
                                                                      size = guide_legend(nrow = 2))
 p
-# p <- p + geom_text(aes(label= SampleID), size=4, hjust=0)
+# p <- p 
 
 #MDS
 tmp.mds <- dist(t(tmp))
@@ -574,6 +551,8 @@ p <- p + theme_bw() %+replace% theme(legend.position="top") + guides(colour = gu
                                                                      size = guide_legend(nrow = 2))
 p
 ```
+
+
 Tree based clustering of samples
 ```{r decompse.normalise.data.1, fig.height=6, fig.width=10, results='asis'}
 # Eucledian tree based analysis
@@ -592,6 +571,7 @@ WGCNA::plotDendroAndColors(tree,
                            main = "Sample dendrogram",
                            groupLabels = colnames(COVARIATES.tmp))
 ```
+
 ```{r temp, include = F}
 dev.off()
 gc()
@@ -632,7 +612,7 @@ preAdjustedSigCovars[["PC_res"]][[2]]$plotData
 ### Model Identification
 ```{r fxn}
 # Function to fit a mixed effect model and return BIC
-fitMixedEffectModel <- function(varsToFit, groupingVar, lcpm, cnt, covars){
+fitFixedEffectModel <- function(varsToFit, lcpm, cnt, covars){
   
   # Get design matrix
   designMat = getDesignMatrix(covars[colnames(lcpm), varsToFit, drop=F], Intercept = F)
@@ -642,34 +622,28 @@ fitMixedEffectModel <- function(varsToFit, groupingVar, lcpm, cnt, covars){
   cnt[is.na(cnt)] = 0
   voomWeights = limma::voom(cnt, design = designMat, plot=F)$weights
   
-  modelBIC = foreach::foreach(i = 1:dim(lcpm)[1],
-                              .combine = rbind,
-                              .packages = c('lme4', 'dplyr'),
-                              .export = c('voomWeights')) %dopar% {
-                                
-                                # Perform weighted mixed linear models for every gene
-                                expr = data.frame(Gx = lcpm[i,])
-                                data = cbind(expr,
-                                             designMat[rownames(expr),],
-                                             Individual_ID = groupingVar)
-                                formula = paste(setdiff(colnames(data), c('Gx', 'Individual_ID')), collapse = '+') %>%
-                                  paste('Gx ~',.,'+ (1|Individual_ID)', collapse = ' ')
-                              
-                                weights = voomWeights[i,]
-                                BIC = NA
-                                tryCatch({
-                                  mdl = lmer(formula = formula, 
-                                             data = data, 
-                                             weights = weights)
-                                  BIC = BIC(mdl)
-                                }, error = function(e){
-                                  BIC = NA
-                                })
-                              return(data.frame(ensembl_gene_id = rownames(lcpm)[i],
-                                                BIC = BIC))
-                            }
+  modelBIC = plyr::ldply(1:dim(lcpm)[1],
+                         .fun = function(i, lcpm, designMat, voomWeights){
+                           # Fit a linear models for every gene
+                           data = cbind(data.frame(Gx = lcpm[i,]),
+                                        designMat, 
+                                        weight = voomWeights[i,])
+                           
+                           formula = paste(setdiff(colnames(data), c('Gx', 'weight')), collapse = '+') %>%
+                             paste('Gx ~',., collapse = ' ')
+                           
+                           mdl = stats::lm(formula = formula, 
+                                           data = data, 
+                                           weights = weight)
+                           
+                           data.frame(ensembl_gene_id = rownames(lcpm)[i], BIC = BIC(mdl))
+                         }, 
+                         lcpm, designMat, voomWeights, 
+                         .parallel = F,
+                         .paropts = list(.packages = c('dplyr')))
   return(modelBIC)
-  }
+}
+
 
 # Function to select covariates in a step-wise regression fashion
 selectCovarsToAdjust <- function(covarsToSelect, adjustCovars, covars, lcpm, cnt, baseModelBIC){
@@ -678,21 +652,20 @@ selectCovarsToAdjust <- function(covarsToSelect, adjustCovars, covars, lcpm, cnt
   pkgs = c('CovariateAnalysis', 'data.table', 'dplyr', 'plyr',
            'edgeR', 'limma', 'lme4', 'foreach', 'doParallel')
   while(length(covarsToSelect) != 0){
-    allModelBIC = foreach(i = 1:length(covarsToSelect),
-                          .combine = c,
-                          .packages = pkgs,
-                          .export = c('fitMixedEffectModel')) %dopar% {
-                            
-                            # Fit a mixed effect linear model and get all BIC
-                            modelBIC = fitMixedEffectModel(c(adjustCovars, covarsToSelect[i]),
-                                                           covars[colnames(cnt),'Individual_ID'], 
-                                                           lcpm, 
-                                                           cnt, 
-                                                           covars) %>%
-                            plyr::rename(c('BIC' = covarsToSelect[i]))
-                              
-                            return(list(modelBIC))
-                          }
+    allModelBIC = plyr::llply(1:length(covarsToSelect),
+                              .fun = function(i, covarsToSelect, adjustCovars, lcpm, cnt, covars){
+                                
+                                # Fit a mixed effect linear model and get all BIC
+                                modelBIC = fitFixedEffectModel(c(adjustCovars, covarsToSelect[i]),
+                                                               lcpm, cnt, covars) %>%
+                                  plyr::rename(c('BIC' = covarsToSelect[i]))
+                                
+                                return(modelBIC)
+                              },
+                              covarsToSelect, adjustCovars, lcpm, cnt, covars, 
+                              .parallel = F,
+                              .paropts = list(.export = c('fitFixedEffectModel')))
+    
     allModelBIC = plyr::join_all(allModelBIC) 
     
     # Find number of genes that are changed based on BIC
@@ -731,8 +704,7 @@ selectCovarsToAdjust <- function(covarsToSelect, adjustCovars, covars, lcpm, cnt
 ```{r phase1}
 # Fit a base model with the following covariates
 adjust.covars = c('Dx')
-baseModelBIC = fitMixedEffectModel(adjust.covars, 
-                                   COVARIATES[colnames(NEW.COUNTS),'Individual_ID'], 
+baseModelBIC = fitFixedEffectModel(adjust.covars, 
                                    CQN.GENE_EXPRESSION$E, 
                                    NEW.COUNTS, 
                                    COVARIATES) %>%
@@ -751,8 +723,7 @@ Clinical and technical variables selected in phase I are `r paste(adjust.covars,
 #### Phase II (batch effects)
 ```{r phase2}
 # Fit a base model with the following covariates
-baseModelBIC = fitMixedEffectModel(adjust.covars, 
-                                   COVARIATES[colnames(NEW.COUNTS),'Individual_ID'], 
+baseModelBIC = fitFixedEffectModel(adjust.covars, 
                                    CQN.GENE_EXPRESSION$E, 
                                    NEW.COUNTS, 
                                    COVARIATES) %>%
@@ -771,8 +742,7 @@ Clinical, technical and batch variables selected after phase I and II of model i
 #### Phase III (RNASeq alignment specific covariates)
 ```{r phase3}
 # Fit a base model with the following covariates
-baseModelBIC = fitMixedEffectModel(adjust.covars, 
-                                   COVARIATES[colnames(NEW.COUNTS),'Individual_ID'], 
+baseModelBIC = fitFixedEffectModel(adjust.covars, 
                                    CQN.GENE_EXPRESSION$E, 
                                    NEW.COUNTS, 
                                    COVARIATES) %>%
@@ -780,7 +750,7 @@ baseModelBIC = fitMixedEffectModel(adjust.covars,
 
 # Iteratively identify covariates in phase I
 phase3.covars = c("MappedReads", "IntragenicRate", "IntronicRate", "IntergenicRate", "GenesDetected",
-                  "ExpProfEfficiency", "rRNARate", "TotalReads")
+                  "rRNARate", "TotalReads")
 vars.selected = selectCovarsToAdjust(phase3.covars, adjust.covars, 
                                      COVARIATES, CQN.GENE_EXPRESSION$E, 
                                      NEW.COUNTS, baseModelBIC)
@@ -805,15 +775,6 @@ DM1$design = DM1$design[,linColumnFinder(DM1$design)$indepCols]
 tmp = NEW.COUNTS
 tmp[is.na(tmp)] = 0
 VOOM.GENE_EXPRESSION = voom(tmp, design=DM1$design, plot=F)
-
-# Estimate consensus correlation coefficient
-correlation <- parallelDuplicateCorrelation(VOOM.GENE_EXPRESSION, block = COVARIATES$Individual_ID)
-  
-# Re-calculate voom weights with correlation of random effects
-VOOM.GENE_EXPRESSION = voom(tmp, 
-                            design=DM1$design, plot=F,
-                            block = COVARIATES$Individual_ID, 
-                            correlation = correlation$cor)
 
 # Fit linear model using new weights and new design
 VOOM.GENE_EXPRESSION$E = CQN.GENE_EXPRESSION$E
@@ -944,19 +905,22 @@ p
 ### Associate differential expression results with gc content, gene length and average expression
 ```{r associate.de, fig.height=10, fig.width=15}
 pl = list()
-pl[[1]] = ggplot(DE, aes(x = log10(Length), y = logFC, color = Direction)) + geom_point() 
+pl[[1]] = ggplot(DE %>% 
+                   arrange(match(Direction, c("NONE", "UP", "DOWN"))), aes(x = log10(Length), y = logFC, color = Direction)) + geom_point() 
 pl[[1]] = pl[[1]] + geom_smooth(method = 'loess', inherit.aes = FALSE, aes(x = log10(Length), y = logFC))
-pl[[1]] = pl[[1]] + facet_grid(Comparison~.) + scale_color_manual(values = c('green','grey','red'))
+pl[[1]] = pl[[1]] + facet_grid(Comparison~.) + scale_color_manual(values = c('red','grey','green'))
 pl[[1]] = pl[[1]] + theme_bw() %+replace% theme(legend.position = 'top')
 
-pl[[2]] = ggplot(DE, aes(x = percentage_gene_gc_content, y = logFC, color = Direction)) + geom_point()
+pl[[2]] = ggplot(DE %>% 
+                   arrange(match(Direction, c("NONE", "UP", "DOWN"))), aes(x = percentage_gene_gc_content, y = logFC, color = Direction)) + geom_point()
 pl[[2]] = pl[[2]] + geom_smooth(method = 'loess', inherit.aes = FALSE, aes(x = percentage_gene_gc_content, y = logFC))
-pl[[2]] = pl[[2]] + facet_grid(Comparison~.) + scale_color_manual(values = c('green','grey','red'))
+pl[[2]] = pl[[2]] + facet_grid(Comparison~.) + scale_color_manual(values = c('red','grey','green'))
 pl[[2]] = pl[[2]] + theme_bw() %+replace% theme(legend.position = 'top')
 
-pl[[3]] = ggplot(DE, aes(x = AveExpr, y = logFC, color = Direction)) + geom_point()
+pl[[3]] = ggplot(DE %>% 
+                   arrange(match(Direction, c("NONE", "UP", "DOWN"))), aes(x = AveExpr, y = logFC, color = Direction)) + geom_point()
 pl[[3]] = pl[[3]] + geom_smooth(method = 'loess', inherit.aes = FALSE, aes(x = AveExpr, y = logFC))
-pl[[3]] = pl[[3]] + facet_grid(Comparison~.) + scale_color_manual(values = c('green','grey','red'))
+pl[[3]] = pl[[3]] + facet_grid(Comparison~.) + scale_color_manual(values = c('red','grey','green'))
 pl[[3]] = pl[[3]] + theme_bw() %+replace% theme(legend.position = 'top')
 
 multiplot(plotlist = pl, cols = 3)
