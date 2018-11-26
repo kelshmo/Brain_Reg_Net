@@ -122,7 +122,7 @@ METADATA_QC_DLPFC = downloadFile_version(METADATA_QC_DLPFC_ID, version = 9) %>%
                                       'rnaSeq_report:Intragenic_Rate','rnaSeq_report:Intronic_Rate',
                                       'rnaSeq_report:Intergenic_Rate','rnaSeq_report:Genes_Detected',
                                       'rnaSeq_report:Expression_Profiling_Efficiency', 'rnaSeq_report:rRNA_Rate',
-                                      'rnaSeq_report:Total_Reads', 'rnaSeq_report:Alignment_Rate'))
+                                      'rnaSeq_report:Total_Reads', 'rnaSeq_report:Percent_Aligned'))
 ```
 
 ### Data preprocessing
@@ -142,7 +142,7 @@ METADATA = METADATA_QC_DLPFC %>%
                 IntragenicRate = `rnaSeq_report:Intragenic_Rate`, IntronicRate = `rnaSeq_report:Intronic_Rate`, 
                 IntergenicRate = `rnaSeq_report:Intergenic_Rate`, GenesDetected = `rnaSeq_report:Genes_Detected`,
                 ExpProfEfficiency = `rnaSeq_report:Expression_Profiling_Efficiency`, rRNARate = `rnaSeq_report:rRNA_Rate`,
-                TotalReads = `rnaSeq_report:Total_Reads`, AlignmentRate = `rnaSeq_report:Alignment_Rate`) %>%
+                TotalReads = `rnaSeq_report:Total_Reads`, AlignmentRate = `rnaSeq_report:Percent_Aligned`) %>%
   dplyr::select(SampleID, Individual_ID, Institution, Reported_Gender,Sex, Ethnicity, Age_of_Death, PMI, Dx, 
                 RIN, IsolationExclude, ReportExclude, EV.1, EV.2, EV.3, EV.4, EV.5,
                 LibraryBatch, FlowcellBatch, RibozeroBatch, MappedReads, TotalReads, GenesDetected, AlignmentRate,
