@@ -272,7 +272,7 @@ sapply(METADATA, function(x) sum(is.nan(x)))
 ```{r covariates.clustering}
 FactorCovariates <- c('Individual_ID', "Institution", "Reported_Gender", "LibraryBatch", "Dx", "FlowcellBatch")
 ContCovariates <- c("Age_of_Death", "PMI", "RIN", "MappedReads", "IntragenicRate", "IntronicRate", "IntergenicRate",
-                    "GenesDetected", "ExpProfEfficiency", "rRNARate", "TotalReads", 
+                    "GenesDetected", "ExpProfEfficiency", "rRNARate", "TotalReads", "PercentAligned", 
                     "EV.1", "EV.2", "EV.3", "EV.4", "EV.5")
 
 # Find inter relation between factor covariates

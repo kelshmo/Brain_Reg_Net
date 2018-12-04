@@ -82,13 +82,22 @@ downloadFile <- function(id){
 downloadFile_version <- function(id , version){
   fread(synGet(id, version = version)$path, data.table = F)
 }
-# Download reprocessed counts (DLPFC)
+# # Download reprocessed counts (DLPFC)
 COUNT_ID = 'syn16783083'
 ALL_USED_IDs = COUNT_ID
 COUNT = downloadFile(COUNT_ID) %>% data.frame()
 rownames(COUNT) = COUNT$gene_id
 COUNT$gene_id = NULL
 COUNT$transcript_id.s. = NULL
+
+# #featureCounts
+# COUNT_ID = 'syn16783066'
+# ALL_USED_IDs = COUNT_ID
+# COUNT = downloadFile(COUNT_ID) %>% 
+#   data.frame() %>% 
+#   select(-one_of("Chr","Start","End","Strand","Length"))
+# rownames(COUNT) = COUNT$Geneid
+# COUNT$Geneid = NULL
 
 # Download gene lengths (DLPFC)
 GENE.LEN = downloadFile('syn16783074') %>%
@@ -118,11 +127,14 @@ METADATA_QC_DLPFC = downloadFile_version(METADATA_QC_DLPFC_ID, version = 10) %>%
   dplyr::select(Individual_ID, Institution, Reported_Gender, Sex, Ethnicity, Age_of_Death, `PMI_(in_hours)`, Dx,
                 Sample_RNA_ID, one_of('rnaSeq_isolation:Exclude?', 'rnaSeq_isolation:RIN',
                                       'rnaSeq_report:Ribozero_Batch', 'rnaSeq_report:Library_Batch', 
-                                      'rnaSeq_report:Flowcell_Batch', 'rnaSeq_report:Exclude?', 'rnaSeq_report:Mapped_Reads',
+                                      'rnaSeq_report:Flowcell_Batch', 'rnaSeq_report:Exclude?',
+                                      'rnaSeq_report:Mapped_Reads',
                                       'rnaSeq_report:Intragenic_Rate','rnaSeq_report:Intronic_Rate',
                                       'rnaSeq_report:Intergenic_Rate','rnaSeq_report:Genes_Detected',
-                                      'rnaSeq_report:Expression_Profiling_Efficiency', 'rnaSeq_report:rRNA_Rate',
-                                      'rnaSeq_report:Total_Reads', 'rnaSeq_report:Percent_Aligned'))
+                                      'rnaSeq_report:Expression_Profiling_Efficiency',
+                                      'rnaSeq_report:rRNA_Rate',
+                                      'rnaSeq_report:Total_Reads', 'rnaSeq_report:Percent_Aligned',
+                                      'rnaSeq_report:Transcripts_Detected'))
 ```
 
 ### Data preprocessing
@@ -143,11 +155,11 @@ METADATA = METADATA_QC_DLPFC %>%
                 IntragenicRate = `rnaSeq_report:Intragenic_Rate`, IntronicRate = `rnaSeq_report:Intronic_Rate`, 
                 IntergenicRate = `rnaSeq_report:Intergenic_Rate`, GenesDetected = `rnaSeq_report:Genes_Detected`,
                 ExpProfEfficiency = `rnaSeq_report:Expression_Profiling_Efficiency`, rRNARate = `rnaSeq_report:rRNA_Rate`,
-                TotalReads = `rnaSeq_report:Total_Reads`, AlignmentRate = `rnaSeq_report:Percent_Aligned`) %>%
+                TotalReads = `rnaSeq_report:Total_Reads`, AlignmentRate = `rnaSeq_report:Percent_Aligned`, TranscriptsDetected = `rnaSeq_report:Transcripts_Detected`) %>%
   dplyr::select(SampleID, Individual_ID, Institution, Reported_Gender,Sex, Ethnicity, Age_of_Death, PMI, Dx, 
                 RIN, IsolationExclude, ReportExclude, GenotypeExclude, EV.1, EV.2, EV.3, EV.4, EV.5,
                 LibraryBatch, FlowcellBatch, RibozeroBatch, MappedReads, TotalReads, GenesDetected, AlignmentRate,
-                IntragenicRate, IntergenicRate, IntronicRate, ExpProfEfficiency, rRNARate) %>%
+                IntragenicRate, IntergenicRate, IntronicRate, ExpProfEfficiency, rRNARate, TranscriptsDetected) %>%
   dplyr::filter(SampleID %in% colnames(COUNT), !is.na(SampleID)) %>%  
   dplyr::mutate(Dx = forcats::fct_recode(Dx, Other = "BP", Other = "undetermined", Control = "Control", SCZ = "SCZ"))
 
@@ -201,8 +213,8 @@ Following sample are removed `r paste(removedIDs, collapse = ',')`
 
 ```{r gene.param, include = F}
 ## Get GC content from biomart
-backgroundGenes = data.frame(gene_id = rownames(COUNT)) %>%
-  dplyr::mutate(id = gene_id) %>%
+backgroundGenes = data.frame(gene_id = rownames(COUNT)) %>% 
+  dplyr::mutate(id = gene_id) %>% 
   tidyr::separate(id, c('ensembl_gene_id','position'), sep = '\\.')
 
 # Define biomart object
@@ -251,11 +263,13 @@ FILT <- REPORTED.GENDER.COUNTS %>%
   dplyr::select(-one_of("chromosome_name")) %>% 
   tidyr::spread(key = gene_id, value = `counts(log)`) %>% 
   mutate(XIST = as.numeric(`ENSG00000229807.10`)) %>% 
-  mutate(UTY = as.numeric(`ENSG00000183878.15`))
+  mutate(UTY = as.numeric(`ENSG00000183878.15`)) %>% 
+  mutate(UTY = ifelse(UTY == -Inf, 0, UTY)) %>% 
+  mutate(XIST = ifelse(XIST == -Inf, 0, XIST))
 
 p = ggplot(FILT, aes (x= XIST, y = UTY)) 
 p = p + geom_point(aes(color=`Reported Gender`)) + 
-  ggtitle("Sex Check MSSM/Penn/Pitt Cohort") + 
+  ggtitle("Sex Check HBCC Cohort") + 
   theme(plot.title = element_text(hjust = 0.5, size = 15)) +
   labs(colour = "Reported Gender")
 p
@@ -265,7 +279,7 @@ p
 ### Covariates clustering
 Determine relationship between covariates. 
 ```{r covariates.clustering}
-FactorCovariates <- c('Individual_ID', "Institution", "Reported_Gender", "LibraryBatch", "Dx", "FlowcellBatch")
+FactorCovariates <- c('Individual_ID',"Institution", "Reported_Gender", "LibraryBatch", "Dx", "FlowcellBatch")
 ContCovariates <- c("Age_of_Death", "PMI", "RIN", "MappedReads", "IntragenicRate", "IntronicRate", "IntergenicRate",
                     "GenesDetected", "ExpProfEfficiency", "rRNARate", "TotalReads", 
                     "EV.1", "EV.2", "EV.3", "EV.4", "EV.5")
