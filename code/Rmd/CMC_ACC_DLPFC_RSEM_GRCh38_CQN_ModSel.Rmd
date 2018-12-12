@@ -44,6 +44,7 @@ library(doParallel)
 library(foreach)
 
 cl = makeCluster(detectCores()-2)
+
 registerDoParallel(cl)
 
 options(xtable.type="html")
@@ -989,7 +990,9 @@ all.annotations = list(
    
   normalizationStatus	= TRUE,
   
-  normalizationType	= 'CQNandMS'
+  normalizationType	= 'CQNandMS',
+  rnaquantification = 'RSEM',
+  genomeAssemblyID = 'GRCh38'
 )
 
 # Code
