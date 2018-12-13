@@ -540,7 +540,7 @@ plotdata <- left_join(plotdata, rownameToFirstColumn(COVARIATES, 'SampleID')) %>
 p <- ggplot(plotdata, aes(x=PC1, y=PC2))
 p <- p + geom_point(aes(color=Institution, shape=Tissue, size=Age_of_Death))
 p <- p + theme_bw() + theme(legend.position="right") + facet_grid(Tissue~.)
-p <- p + geom_text(aes(label= SampleID), size=4, hjust=0)
+# p <- p + geom_text(aes(label= SampleID), size=4, hjust=0)
 p
 ```
 Tree based clustering of samples
@@ -877,7 +877,8 @@ FIT.CONTR = eBayes(FIT.CONTR)
 # Get differnetial expression
 DE = lapply(1:6, function(i, FIT){
   topTable(FIT, coef=i, number = 50000, confint = TRUE) %>%
-    rownameToFirstColumn('gene_id') 
+    rownameToFirstColumn('gene_id') %>% 
+    left_join(backgroundGenes)
 }, FIT.CONTR) 
 names(DE) = colnames(contrast)
 
@@ -892,7 +893,7 @@ DE = DE %>%
   tidyr::separate(to.state, into = c('Dx2','Tissue'), sep = '_') %>%
   tidyr::unite(Comparison, Dx1, Dx2, sep = '_vs_') %>%
   left_join(Ensemble2HGNC) %>%
-  left_join(GENE.LEN)
+  left_join(GENE.LEN %>% rownameToFirstColumn('gene_id'))
 DE$Direction[DE$adj.P.Val > 0.05 | abs(DE$logFC) < log2(1.2)] = 'NONE'
 
 tmp = DE %>%
@@ -910,7 +911,7 @@ tmp1 = DE %>%
 kable(full_join(tmp,tmp1))
 
 p = ggplot(DE, aes(y = -log10(adj.P.Val), x = logFC, color = Direction)) + geom_point() + xlim(c(-1,1))
-p = p + scale_color_manual(values = c('green','grey','red'))
+p = p + scale_color_manual(values = c('green','grey','red')) + theme_bw() %+replace% theme(legend.position = 'top')
 p = p + facet_grid(Tissue+.~Comparison, scales = 'fixed')
 p
 ```
@@ -997,53 +998,57 @@ all.annotations = list(
 
 # Code
 CODE <- Folder(name = "ACC and DLPFC - RSEM - EXPECTED COUNTS - GRCh38 - CQN - Sparse Model", parentId = parentId)
-annotations(CODE) = all.annotations
 CODE <- synStore(CODE)
 
 # Store covariates
 COVARIATES = rownameToFirstColumn(COVARIATES, 'SampleID')
 write.table(COVARIATES, file = 'CMC_ACC_DLPFC_Covariates.tsv', sep = '\t', row.names=F, quote=F)
-COV_OBJ = File('CMC_ACC_DLPFC_Covariates.tsv', name = 'Covariates', parentId = CODE$properties$id)
-annotations(COV_OBJ) = annotations(CODE)
-annotations(COV_OBJ)$dataSubType = 'covariates'
+COV_OBJ = synapser::File('CMC_ACC_DLPFC_Covariates.tsv', name = 'Covariates', parentId = CODE$properties$id)
 COV_OBJ = synStore(COV_OBJ, used = ALL_USED_IDs, activityName = activityName, 
                       executed = thisFile, activityDescription = activityDescription)
+all.annotations$dataSubType = 'covariates'
+synSetAnnotations(COV_OBJ, annotations = all.annotations)
 
 # Store filtered counts
 PROCESSED_COUNTS$filteredExprMatrix$counts %>%
   rownameToFirstColumn('ensembl_gene_id') %>%
   write.table(file = 'CMC_ACC_DLPFC_Counts.tsv', sep = '\t', row.names=F, quote=F)
 COUNT_OBJ = File('CMC_ACC_DLPFC_Counts.tsv', name = 'Counts (filtered raw)', parentId = CODE$properties$id)
-annotations(COUNT_OBJ) = annotations(CODE)
-annotations(COUNT_OBJ)$dataSubType = 'filteredCounts'
 COUNT_OBJ = synStore(COUNT_OBJ, activity = synGetActivity(COV_OBJ$properties$id))
+all.annotations$dataSubType = 'filteredCounts'
+synSetAnnotations(COUNT_OBJ, annotations = all.annotations)
+
 
 # Store logCPM
 CQN.GENE_EXPRESSION$E %>%
   rownameToFirstColumn('ensembl_gene_id') %>%
   write.table(file = 'CMC_ACC_DLPFC_logCPM.tsv', sep = '\t', row.names=F, quote=F)
 LCOUNT_OBJ = File('CMC_ACC_DLPFC_logCPM.tsv', name = 'Counts (filtered logCPM)', parentId = CODE$properties$id)
-annotations(LCOUNT_OBJ) = annotations(CODE)
-annotations(LCOUNT_OBJ)$dataSubType = 'filteredLCPM'
-LCOUNT_OBJ = synStore(LCOUNT_OBJ, activity = synGetActivity(COV_OBJ$properties$id))
+LCOUNT_OBJ = synStore(LCOUNT_OBJ, used = ALL_USED_IDs, activityName = activityName, 
+                      executed = thisFile, activityDescription = activityDescription)
+all.annotations$dataSubType = 'filteredLCPM'
+synSetAnnotations(LCOUNT_OBJ, annotations = all.annotations)
+
 
 # Store cqn offsets
 CQN.GENE_EXPRESSION$offset %>%
   rownameToFirstColumn('ensembl_gene_id') %>%
   write.table(file = 'CMC_ACC_DLPFC_offset.tsv', sep = '\t', row.names=F, quote=F)
 OFFSET_OBJ = File('CMC_ACC_DLPFC_offset.tsv', name = 'Gene length and GC content offset', parentId = CODE$properties$id)
-annotations(OFFSET_OBJ) = annotations(CODE)
-annotations(OFFSET_OBJ)$dataSubType = 'offset'
-OFFSET_OBJ = synStore(OFFSET_OBJ, activity = synGetActivity(COV_OBJ$properties$id))
+OFFSET_OBJ = synStore(OFFSET_OBJ, used = ALL_USED_IDs, activityName = activityName, 
+                      executed = thisFile, activityDescription = activityDescription)
+all.annotations$dataSubType = 'offset'
+synSetAnnotations(OFFSET_OBJ, annotations = all.annotations)
 
 # Store design matrix
 DM1$design %>%
   rownameToFirstColumn('SampleID') %>%
   write.table(file = 'CMC_ACC_DLPFC_Design.tsv', sep = '\t', row.names=F, quote=F)
 DM_OBJ = File('CMC_ACC_DLPFC_Design.tsv', name = 'Design Matrix', parentId = CODE$properties$id)
-annotations(DM_OBJ) = annotations(CODE)
-annotations(DM_OBJ)$dataSubType = 'designMatrix'
-DM_OBJ = synStore(DM_OBJ, activity = synGetActivity(COV_OBJ$properties$id))
+DM_OBJ = synStore(DM_OBJ, used = ALL_USED_IDs, activityName = activityName, 
+                  executed = thisFile, activityDescription = activityDescription)
+all.annotations$dataSubType = 'designMatrix'
+synSetAnnotations(DM_OBJ, annotations = all.annotations)
 
 # Store residual gene expression for network analysis
 RESIDUAL.GENE_EXPRESSION %>%
@@ -1052,28 +1057,31 @@ RESIDUAL.GENE_EXPRESSION %>%
 nEXP_OBJ = File('CMC_ACC_DLPFC_netResidualExpression.tsv', 
                 name = 'Normalised, covariates removed residual expression (for network analysis)', 
                 parentId = CODE$properties$id)
-annotations(nEXP_OBJ) = annotations(CODE)
-annotations(nEXP_OBJ)$dataSubType = 'residualGeneExpForNetAnlz'
-nEXP_OBJ = synStore(nEXP_OBJ, activity = synGetActivity(COV_OBJ$properties$id))
+nEXP_OBJ = synStore(nEXP_OBJ, used = ALL_USED_IDs, activityName = activityName, 
+                    executed = thisFile, activityDescription = activityDescription)
+all.annotations$dataSubType = 'residualGeneExpForNetAnlz'
+synSetAnnotations(nEXP_OBJ, annotations = all.annotations)
 
 # Store differential expression results
 write.table(DE, file = 'CMC_ACC_DLPFC_DiffExpression.tsv', sep = '\t', row.names=F, quote=F)
 DEXP_OBJ = File('CMC_ACC_DLPFC_DiffExpression.tsv', 
                 name = 'Differential Expression Results (Dx.Tissue)', 
                 parentId = CODE$properties$id)
-annotations(DEXP_OBJ) = annotations(CODE)
-annotations(DEXP_OBJ)$dataSubType = 'diffExp'
-DEXP_OBJ = synStore(DEXP_OBJ, activity = synGetActivity(COV_OBJ$properties$id))
+DEXP_OBJ = synStore(DEXP_OBJ, used = ALL_USED_IDs, activityName = activityName, 
+                    executed = thisFile, activityDescription = activityDescription)
+all.annotations$dataSubType = 'diffExp'
+synSetAnnotations(DEXP_OBJ, annotations = all.annotations)
 
 # Store enrichment results
 write.table(enrichment.results, file = 'CMC_ACC_DLPFC_EnrichResults.tsv', sep = '\t', row.names=F, quote=F)
 ENRICH_OBJ = File('CMC_ACC_DLPFC_EnrichResults.tsv', 
                   name = 'Enrichment Analysis Results (Dx.Tissue)', 
                   parentId = CODE$properties$id)
-annotations(ENRICH_OBJ) = annotations(CODE)
-annotations(ENRICH_OBJ)$dataSubType = 'enrichResults'
-ENRICH_OBJ = synStore(ENRICH_OBJ, activity = synGetActivity(COV_OBJ$properties$id))
-# stopCluster(cl)
+ENRICH_OBJ = synStore(ENRICH_OBJ, used = ALL_USED_IDs, activityName = activityName, 
+                      executed = thisFile, activityDescription = activityDescription)
+all.annotations$dataSubType = 'enrichResults'
+synSetAnnotations(ENRICH_OBJ, annotations = all.annotations)
+```
 ```
 |  *Results*                                  |  *SynapseID*                     |
 |  -----------------------------------------  |   ---------                      |
