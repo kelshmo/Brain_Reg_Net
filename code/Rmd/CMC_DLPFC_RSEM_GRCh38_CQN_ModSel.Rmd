@@ -253,10 +253,8 @@ FILT <- REPORTED.GENDER.COUNTS %>%
   mutate(UTY = as.numeric(`ENSG00000183878.15`))
 
 p = ggplot(FILT, aes (x= XIST, y = UTY)) 
-p = p + geom_point(aes(color=`Reported Gender`)) + 
-  ggtitle("Sex Check MSSM/Penn/Pitt Cohort") + 
-  theme(plot.title = element_text(hjust=0.5)) +
-  labs(colour = "Reported Gender")
+
+p = p + geom_point(aes(color=`Reported Gender`)) 
 p
 ```
 
@@ -392,6 +390,7 @@ indToRemove = c('MSSM_RNA_ACC_BP_24', 'MSSM_RNA_ACC_375', 'MSSM_RNA_ACC_170', 'M
                 "PITT_RNA_ACC_1240", "PITT_RNA_ACC_1284", "PITT_RNA_ACC_700", "PITT_RNA_ACC_857", "PITT_RNA_ACC_BP_1589",
                 "MSSM_RNA_PFC_230", "MSSM_RNA_PFC_304", "MSSM_RNA_PFC_309", "MSSM_RNA_PFC_329", "MSSM_RNA_PFC_82",
                 "PENN_RNA_PFC_5", "PENN_RNA_PFC_58", "PENN_RNA_PFC_99", "PITT_RNA_PFC_1284")
+indToRemove = c(indToRemove, "PITT_RNA_BP_PFC_1770")
 
 # Find principal components of expression to plot
 PC <- prcomp(voom(PROCESSED_COUNTS$filteredExprMatrix$counts)$E, scale.=T, center = T)
@@ -512,7 +511,6 @@ p <- p + theme_bw() %+replace% theme(legend.position="top") + guides(colour = gu
                                                                      shape = guide_legend(nrow = 2),
                                                                      size = guide_legend(nrow = 2))
 p
-# p <- p + geom_text(aes(label= SampleID), size=4, hjust=0)
 
 #MDS
 tmp.mds <- dist(t(tmp))

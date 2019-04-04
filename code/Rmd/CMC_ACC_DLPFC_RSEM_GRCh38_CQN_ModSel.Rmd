@@ -134,9 +134,9 @@ GENOTYPE = downloadFile(GENOTYPE_ID) %>%
 #Get Metadata
 METADATA_QC_ID = 'syn16816488' 
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_QC_ID
-METADATA_QC = downloadFile_version(METADATA_QC_ID, version = 10)  %>% 
+METADATA_QC = downloadFile_version(METADATA_QC_ID, version = 13)  %>% 
   dplyr::select(Individual_ID, Institution, Reported_Gender, Sex, Ethnicity, Age_of_Death, `PMI_(in_hours)`, Dx,
-                Sample_RNA_ID, one_of('rnaSeq_isolation:Exclude?', 'rnaSeq_isolation:RIN',
+                Sample_RNA_ID, one_of('rnaSeq_isolation:RIN',
                                       'rnaSeq_report:Ribozero_Batch', 'rnaSeq_report:Library_Batch', 
                                       'rnaSeq_report:Flowcell_Batch','rnaSeq_dissection:Brain_Region',
                                       'rnaSeq_report:Exclude?',
@@ -157,7 +157,6 @@ METADATA_QC = downloadFile_version(METADATA_QC_ID, version = 10)  %>%
 METADATA = METADATA_QC %>%
   dplyr::left_join(GENOTYPE) %>%
   dplyr::rename(PMI = `PMI_(in_hours)`,
-                IsolationExclude = `rnaSeq_isolation:Exclude?`, 
                 RIN = `rnaSeq_isolation:RIN`, 
                 ReportExclude = `rnaSeq_report:Exclude?`,
                 SampleID = Sample_RNA_ID,
@@ -175,7 +174,7 @@ METADATA = METADATA_QC %>%
                 TotalReads = `rnaSeq_report:Total_Reads`, 
                 AlignmentRate = `rnaSeq_report:Percent_Aligned`) %>%
   dplyr::select(SampleID, Individual_ID, Institution, Reported_Gender,Sex, Ethnicity, Age_of_Death, PMI, Dx, 
-                RIN, IsolationExclude, ReportExclude, EV.1, EV.2, EV.3, EV.4, EV.5,
+                RIN, ReportExclude, EV.1, EV.2, EV.3, EV.4, EV.5,
                 LibraryBatch, FlowcellBatch, RibozeroBatch, Tissue, MappedReads, TotalReads, GenesDetected, AlignmentRate,
                 IntragenicRate, IntergenicRate, IntronicRate, ExpProfEfficiency, rRNARate) %>%
   dplyr::filter(SampleID %in% colnames(COUNT), !is.na(SampleID)) %>%
@@ -184,7 +183,7 @@ METADATA = METADATA_QC %>%
 
 ### Data preprocessing
 ```{r preprocess.data}
-ind = METADATA$SampleID[which(METADATA$IsolationExclude == 1 | METADATA$ReportExclude == 1)]
+ind = METADATA$SampleID[which( METADATA$ReportExclude == 1)]
 writeLines(paste('Following',length(ind),'samples are marked exclude'))
 writeLines(paste(ind, collapse = ', '))
 METADATA <- METADATA  %>% dplyr::filter(!(SampleID %in% ind)) 
@@ -374,7 +373,8 @@ COUNT$gene_id = NULL
 genesToAnalyze = dlply(METADATA, .(Dx.Tissue, Reported_Gender), .fun = function(mtd, count){
   processed.counts = getGeneFilteredGeneExprMatrix(count[,mtd$SampleID],
                                                    MIN_GENE_CPM=1, 
-                                                   MIN_SAMPLE_PERCENT_WITH_MIN_GENE_CPM=0.5)
+                                                   MIN_SAMPLE_PERCENT_WITH_MIN_GENE_CPM=0.5,
+                                                   verbose = TRUE)
   processed.counts$filteredExprMatrix$genes
 }, COUNT)
 
@@ -1014,7 +1014,8 @@ PROCESSED_COUNTS$filteredExprMatrix$counts %>%
   rownameToFirstColumn('ensembl_gene_id') %>%
   write.table(file = 'CMC_ACC_DLPFC_Counts.tsv', sep = '\t', row.names=F, quote=F)
 COUNT_OBJ = File('CMC_ACC_DLPFC_Counts.tsv', name = 'Counts (filtered raw)', parentId = CODE$properties$id)
-COUNT_OBJ = synStore(COUNT_OBJ, activity = synGetActivity(COV_OBJ$properties$id))
+COUNT_OBJ = synStore(COUNT_OBJ, used = ALL_USED_IDs, activityName = activityName, 
+                     executed = thisFile, activityDescription = activityDescription)
 all.annotations$dataSubType = 'filteredCounts'
 synSetAnnotations(COUNT_OBJ, annotations = all.annotations)
 

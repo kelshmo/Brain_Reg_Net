@@ -21,3 +21,10 @@ compare <- cor(c,f, use = "complete.obs")
 viz <- image(compare)
 
 viz
+
+#sanity check DLPFC 
+
+#1.Sample to sample, and gene to gene correlations and plot the distribution of correlation coefficients in both the cases
+#2. L1 or L2 Norm of the difference between your residual matrix and mine
+#3. Compare the resulting covariates matrix between your and mine for quick metadata discrepancy.
+
